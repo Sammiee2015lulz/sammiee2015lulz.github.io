@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Shoot the Box - Full Game</title>
+    <style>
+        body { margin:0; background:#0a0a1f; overflow:hidden; touch-action:none; font-family:Arial, sans-serif; }
+        canvas { display:block; margin:0 auto; background:#1a1a2e; }
+        .screen { position:absolute; top:0; left:0; width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(10,10,31,0.95); color:white; z-index:10; }
+        h1 { font-size:62px; margin:0 0 20px 0; text-shadow:0 0 30px #0ff, 0 0 60px #0f0; }
+        button { font-size:26px; padding:14px 50px; margin:8px; background:#0f0; color:#000; border:none; border-radius:18px; box-shadow:0 0 20px #0f0; font-weight:bold; }
+        button:active { transform:scale(0.92); }
+        .smallBtn { font-size:22px; padding:12px 40px; background:#ff0; }
+        .overlay { position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.96); display:none; flex-direction:column; align-items:center; justify-content:center; color:white; z-index:20; padding:20px; }
+        .close { position:absolute; top:20px; right:30px; font-size:50px; cursor:pointer; }
+        #score, #level, #lives, #coins, #gunName { position:absolute; color:#0f0; font-size:24px; z-index:5; pointer-events:none; }
+        #score { top:12px; left:12px; }
+        #level { top:12px; left:50%; transform:translateX(-50%); }
+        #lives { top:12px; right:12px; }
+        #coins { bottom:100px; left:12px; color:#ff0; }
+        #gunName { bottom:100px; right:12px; color:#fff; font-size:22px; }
+        .gunBtn { position:absolute; bottom:20px; font-size:20px; padding:10px 26px; background:#ff0; color:#000; border-radius:12px; }
+        .adScreen { background:#111; border:4px solid #ff0; padding:40px; border-radius:20px; text-align:center; box-shadow:0 0 40px #ff0; }
+    </style>
+</head>
+<body>
+
+<canvas id="game" width="400" height="700"></canvas>
+
+<!-- MENU -->
+<div id="menu" class="screen">
+    <h1>SHOOT<br>THE BOX</h1>
+    <div style="font-size:24px;margin:10px 0 30px;">High Score: <span id="menuHigh">0</span></div>
+    <div style="font-size:22px;margin-bottom:20px;">Coins: <span id="menuCoins">0</span></div>
+    <button id="playBtn">PLAY</button>
+    <button id="shopBtn" class="smallBtn">UPGRADES</button>
+    <button id="howBtn" class="smallBtn">HOW TO PLAY</button>
+    <button id="musicBtn" class="smallBtn">MUSIC: ON</button>
+</div>
+
+<!-- HOW TO PLAY -->
+<div id="howScreen" class="overlay">
+    <span class="close" id="closeHow">×</span>
+    <h2>HOW TO PLAY</h2>
+    <div style="max-width:320px;text-align:left;font-size:19px;line-height:1.7;">
+        • Move finger left/right<br>
+        • Tap anywhere to shoot<br>
+        • Tap ▶ to change gun<br>
+        • Shoot stars for power-ups<br>
+        • Survive & level up!
+    </div>
+</div>
+
+<!-- GAME OVER -->
+<div id="gameOverScreen" class="screen" style="display:none">
+    <h1>GAME OVER</h1>
+    <p style="font-size:28px;">Score: <span id="finalScore">0</span></p>
+    <p style="font-size:24px;color:#ff0;">Coins: <span id="totalCoins">0</span></p>
+    <button id="restartBtn">PLAY AGAIN</button>
+    <button id="watchAdBtn" style="background:#0ff;margin-top:15px;">Watch Ad for +500 Coins</button>
+</div>
+
+<div id="score">Score: 0</div>
+<div id="level">Level 1</div>
+<div id="lives">❤️❤️❤️</div>
+<div id="coins">Coins: 0</div>
+<div id="gunName">PISTOL</div>
+
+<button id="leftGun" class="gunBtn" style="left:20px;">◀</button>
+<button id="rightGun" class="gunBtn" style="right:20px;">▶</button>
+
+<!-- REAL ADS (AdinPlay) -->
+<script src="https://api.adinplay.com/libs/aiptag/latest/aiptag.js"></script>
+
+<script>
+// =============== FULL COMPLETE GAME ===============
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+const levelEl = document.getElementById('level');
+const livesEl = document.getElementById('lives');
+const coinsEl = document.getElementById('coins');
+const gunNameEl = document.getElementById('gunName');
+const menuHigh = document.getElementById('menuHigh');
+const menuCoins = document.getElementById('menuCoins');
+const finalScoreEl = document.getElementById('finalScore');
+const totalCoinsEl = document.getElementById('totalCoins');
+const watchAdBtn = document.getElementById('watchAdBtn');
+
+let gameState = 'menu';
+let score = 0, level = 1, lives = 3, multiplier = 1;
+let gunX = 200, currentGunIndex = 0;
+const guns = [
+    {name:'PISTOL', color:'#0f0', fireRate:160, bs:17},
+    {name:'SHOTGUN', color:'#ff0', fireRate:420, bs:15},
+    {name:'MACHINE', color:'#f0f', fireRate:60, bs:18},
+    {name:'LASER', color:'#0ff', fireRate:280, bs:25},
+    {name:'ROCKET', color:'#f80', fireRate:650, bs:9}
+];
+let bullets = [], boxes = [], powerups = [], particles = [];
+let lastSpawn = 0, lastPowerSpawn = 0;
+let rapidTimer = 0, slowTimer = 0, doubleTimer = 0;
+let musicEnabled = true;
+let highScore = parseInt(localStorage.getItem('highScore')) || 0;
+let totalCoins = parseInt(localStorage.getItem('coins')) || 0;
+
+menuHigh.textContent = highScore;
+menuCoins.textContent = totalCoins;
+
+// Background music
+const bgMusic = new Audio('https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3');
+bgMusic.loop = true;
+bgMusic.volume = 0.35;
+
+// Detailed sounds
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function playSound(type, gunIndex = -1) {
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.connect(g); g.connect(audioCtx.destination);
+    if (type === 'shoot') {
+        const gData = guns[gunIndex];
+        if (gData.name === 'PISTOL') { o.type = 'sawtooth'; o.frequency.value = 1200; g.gain.value = 0.4; }
+        if (gData.name === 'SHOTGUN') { o.type = 'triangle'; o.frequency.value = 180; g.gain.value = 0.6; }
+        if (gData.name === 'MACHINE') { o.type = 'square'; o.frequency.value = 900; g.gain.value = 0.2; }
+        if (gData.name === 'LASER') { o.type = 'sine'; o.frequency.setValueAtTime(2400, audioCtx.currentTime); g.gain.value = 0.25; }
+        if (gData.name === 'ROCKET') { o.type = 'triangle'; o.frequency.value = 120; g.gain.value = 0.5; }
+    } else if (type === 'explode') {
+        o.type = 'sine'; o.frequency.value = 80; g.gain.value = 0.8;
+    } else if (type === 'power') {
+        o.type = 'sine'; o.frequency.setValueAtTime(1300, audioCtx.currentTime); g.gain.value = 0.4;
+    }
+    o.start(); o.stop(audioCtx.currentTime + 0.1);
+}
+
+function createExplosion(x, y, c) {
+    playSound('explode');
+    for (let i = 0; i < 22; i++) {
+        particles.push({x, y, vx: Math.random()*14-7, vy: Math.random()*14-9, color: c || '#ff0', life: 35});
+    }
+}
+
+function spawnBox() {
+    boxes.push({x: Math.random()*300+50, y: -60, size: 48+Math.random()*28, color: `hsl(${Math.random()*360},90%,65%)`});
+}
+
+function spawnPowerup() {
+    const t = ['rapid','slow','double','life'];
+    powerups.push({x: Math.random()*300+50, y: -40, type: t[Math.floor(Math.random()*t.length)], size: 28});
+}
+
+function shoot() {
+    if (gameState !== 'playing') return;
+    playSound('shoot', currentGunIndex);
+    const g = guns[currentGunIndex];
+    const delay = Math.max(40, g.fireRate - 18);
+    if (Date.now() - (window.lastShot||0) < delay) return;
+    window.lastShot = Date.now();
+
+    const bs = g.bs;
+    if (g.name === 'PISTOL') bullets.push({x:gunX, y:590, vx:0, vy:-bs});
+    else if (g.name === 'SHOTGUN') {
+        bullets.push({x:gunX-14,y:590,vx:-3,vy:-bs+2});
+        bullets.push({x:gunX,y:590,vx:0,vy:-bs});
+        bullets.push({x:gunX+14,y:590,vx:3,vy:-bs+2});
+    } else if (g.name === 'MACHINE') bullets.push({x:gunX+Math.random()*12-6,y:590,vx:Math.random()*2-1,vy:-bs-3});
+    else if (g.name === 'LASER') bullets.push({x:gunX,y:590,vx:0,vy:-bs,type:'laser'});
+    else if (g.name === 'ROCKET') bullets.push({x:gunX,y:590,vx:0,vy:-bs,type:'rocket'});
+}
+
+function gameLoop() {
+    if (gameState !== 'playing') return;
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, 400, 700);
+
+    level = Math.floor(score / 800) + 1;
+    levelEl.textContent = `Level ${level}`;
+    const spawnRate = Math.max(320, 780 - level * 38);
+    const fallSpeed = 4.4 + level * 0.8;
+
+    if (Date.now() - lastSpawn > spawnRate) {
+        spawnBox();
+        if (Math.random() < 0.35) spawnBox();
+        lastSpawn = Date.now();
+    }
+    if (Date.now() - lastPowerSpawn > 9500) {
+        spawnPowerup();
+        lastPowerSpawn = Date.now();
+    }
+
+    const g = guns[currentGunIndex];
+    gunNameEl.textContent = g.name;
+    ctx.fillStyle = '#555';
+    ctx.fillRect(gunX - 32, 620, 64, 35);
+    ctx.fillStyle = g.color;
+    ctx.fillRect(gunX - 18, 610, 36, 12);
+
+    // Bullets
+    for (let i = bullets.length - 1; i >= 0; i--) {
+        let b = bullets[i];
+        b.y += b.vy || -17;
+        b.x += b.vx || 0;
+        ctx.fillStyle = b.type === 'laser' ? '#0ff' : '#ffff00';
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = ctx.fillStyle;
+        ctx.fillRect(b.x - 4, b.y - 12, 8, 26);
+        ctx.shadowBlur = 0;
+        if (b.y < -20) bullets.splice(i, 1);
+    }
+
+    // Boxes
+    for (let i = boxes.length - 1; i >= 0; i--) {
+        let box = boxes[i];
+        box.y += fallSpeed;
+        ctx.fillStyle = box.color;
+        ctx.fillRect(box.x, box.y, box.size, box.size);
+        if (box.y > 720) {
+            boxes.splice(i, 1);
+            lives--;
+            livesEl.textContent = '❤️'.repeat(lives);
+            if (lives <= 0) endGame();
+        }
+    }
+
+    // Collision
+    for (let i = bullets.length - 1; i >= 0; i--) {
+        let b = bullets[i];
+        for (let j = boxes.length - 1; j >= 0; j--) {
+            let box = boxes[j];
+            if (b.x > box.x && b.x < box.x + box.size && b.y > box.y && b.y < box.y + box.size) {
+                createExplosion(box.x + box.size/2, box.y + box.size/2, box.color);
+                boxes.splice(j, 1);
+                bullets.splice(i, 1);
+                score += 100 * multiplier;
+                scoreEl.textContent = 'Score: ' + score;
+                break;
+            }
+        }
+    }
+
+    // Particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life--;
+        ctx.globalAlpha = p.life / 35;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x, p.y, 7, 7);
+        if (p.life <= 0) particles.splice(i, 1);
+    }
+    ctx.globalAlpha = 1;
+
+    requestAnimationFrame(gameLoop);
+}
+
+function endGame() {
+    gameState = 'gameOver';
+    finalScoreEl.textContent = score;
+    totalCoinsEl.textContent = totalCoins;
+    gameOverScreen.style.display = 'flex';
+}
+
+// Buttons
+document.getElementById('playBtn').onclick = () => {
+    document.getElementById('menu').style.display = 'none';
+    gameState = 'playing';
+    resetGame();
+    gameLoop();
+};
+
+document.getElementById('restartBtn').onclick = () => {
+    document.getElementById('gameOverScreen').style.display = 'none';
+    document.getElementById('menu').style.display = 'flex';
+    gameState = 'menu';
+};
+
+document.getElementById('howBtn').onclick = () => document.getElementById('howScreen').style.display = 'flex';
+document.getElementById('closeHow').onclick = () => document.getElementById('howScreen').style.display = 'none';
+
+document.getElementById('leftGun').onclick = () => { currentGunIndex = (currentGunIndex - 1 + guns.length) % guns.length; };
+document.getElementById('rightGun').onclick = () => { currentGunIndex = (currentGunIndex + 1) % guns.length; };
+
+canvas.addEventListener('mousemove', e => { if (gameState === 'playing') gunX = e.offsetX; });
+canvas.addEventListener('touchmove', e => { e.preventDefault(); if (gameState === 'playing') gunX = e.touches[0].clientX - canvas.getBoundingClientRect().left; });
+canvas.addEventListener('click', shoot);
+canvas.addEventListener('touchstart', e => { e.preventDefault(); shoot(); });
+
+// Real AdinPlay rewarded ads
+watchAdBtn.onclick = () => {
+    if (typeof aiptag !== 'undefined' && aiptag.adtag) {
+        aiptag.adtag.playRewardedVideo({
+            onReward: () => {
+                totalCoins += 500;
+                localStorage.setItem('coins', totalCoins);
+                menuCoins.textContent = totalCoins;
+                totalCoinsEl.textContent = totalCoins;
+                alert("🎉 +500 Coins added! Thanks for watching the ad!");
+            },
+            onNoReward: () => alert("No ad available right now. Try again later.")
+        });
+    } else {
+        alert("Ad network loading... Try again in a few seconds.");
+    }
+};
+
+// Reset
+function resetGame() {
+    score = 0; level = 1; lives = 3;
+    bullets = []; boxes = []; powerups = []; particles = [];
+    scoreEl.textContent = 'Score: 0';
+    levelEl.textContent = 'Level 1';
+    livesEl.textContent = '❤️❤️❤️';
+}
+
+// Start
+bgMusic.volume = 0.35;
+</script>
+
+</body>
+</html>
