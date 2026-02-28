@@ -113,24 +113,16 @@ bgMusic.loop = true;
 bgMusic.volume = 0.35;
 
 // Detailed sounds
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-function playSound(type, gunIndex = -1) {
-    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
-    o.connect(g); g.connect(audioCtx.destination);
-    if (type === 'shoot') {
-        const gData = guns[gunIndex];
-        if (gData.name === 'PISTOL') { o.type = 'sawtooth'; o.frequency.value = 1200; g.gain.value = 0.4; }
-        if (gData.name === 'SHOTGUN') { o.type = 'triangle'; o.frequency.value = 180; g.gain.value = 0.6; }
-        if (gData.name === 'MACHINE') { o.type = 'square'; o.frequency.value = 900; g.gain.value = 0.2; }
-        if (gData.name === 'LASER') { o.type = 'sine'; o.frequency.setValueAtTime(2400, audioCtx.currentTime); g.gain.value = 0.25; }
-        if (gData.name === 'ROCKET') { o.type = 'triangle'; o.frequency.value = 120; g.gain.value = 0.5; }
-    } else if (type === 'explode') {
-        o.type = 'sine'; o.frequency.value = 80; g.gain.value = 0.8;
-    } else if (type === 'power') {
-        o.type = 'sine'; o.frequency.setValueAtTime(1300, audioCtx.currentTime); g.gain.value = 0.4;
-    }
-    o.start(); o.stop(audioCtx.currentTime + 0.1);
-}
+const soundURLs = {
+    bgMusic: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",   // ← YOUR BACKGROUND MUSIC
+    pistol:  "freesound_community-9mm-pistol-shot-6349.mp3",     // ← YOUR PISTOL SOUND
+    shotgun: "freesound_community-shotgun-03-38220.mp3",    // ← YOUR SHOTGUN SOUND
+    machine: "dennish18-machine-gun-129928.mp3",    // ← YOUR MACHINE GUN SOUND
+    laser:   "ahmed_abdulaal-laser-312360.mp3",      // ← YOUR LASER SOUND
+    rocket:  "49053354-rocket-launcher-307512.mp3",     // ← YOUR ROCKET SOUND
+    explode: "freesound_community-medium-explosion-40472.mp3",  // ← YOUR EXPLOSION SOUND
+    power:   "lolo_s-power-up-474087.mp3"     // ← YOUR POWER-UP SOUND
+};
 
 function createExplosion(x, y, c) {
     playSound('explode');
@@ -237,18 +229,7 @@ function gameLoop() {
         }
     }
 
-    // Particles
-    for (let i = particles.length - 1; i >= 0; i--) {
-        let p = particles[i];
-        p.x += p.vx;
-        p.y += p.vy;
-        p.life--;
-        ctx.globalAlpha = p.life / 35;
-        ctx.fillStyle = p.color;
-        ctx.fillRect(p.x, p.y, 7, 7);
-        if (p.life <= 0) particles.splice(i, 1);
-    }
-    ctx.globalAlpha = 1;
+function createExplosion(x,y,c){ playSound('explode'); for(let i=0;i<22;i++) particles.push({x,y,vx:Math.random()*14-7,vy:Math.random()*14-9,color:c||'#ff0',life:35}); }
 
     requestAnimationFrame(gameLoop);
 }
@@ -310,6 +291,24 @@ function resetGame() {
     scoreEl.textContent = 'Score: 0';
     levelEl.textContent = 'Level 1';
     livesEl.textContent = '❤️❤️❤️';
+}
+
+// Custom sounds
+const shootSounds = {
+    0: new Audio(soundURLs.pistol),
+    1: new Audio(soundURLs.shotgun),
+    2: new Audio(soundURLs.machine),
+    3: new Audio(soundURLs.laser),
+    4: new Audio(soundURLs.rocket)
+};
+const explodeSound = new Audio(soundURLs.explode);
+const powerSound = new Audio(soundURLs.power);
+    
+// Play shoot sound
+function playShoot() {
+    const s = shootSounds[currentGunIndex];
+    s.currentTime = 0;
+    s.play().catch(()=>{});
 }
 
 // Start
